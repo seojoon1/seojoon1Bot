@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os
+from urllib.parse import quote
 from dotenv import load_dotenv
 import requests
 
@@ -284,6 +285,7 @@ async def player_info(interaction: discord.Interaction, nickname: str):
         # 임베드 생성
         embed = discord.Embed(
             title=f"🎮 {nickname}",
+            url=f"https://dak.gg/er/players/{quote(nickname)}",
             color=tireColor.get(tier, discord.Color.gold())
         )
 
@@ -301,6 +303,7 @@ async def player_info(interaction: discord.Interaction, nickname: str):
             name="전적",
             value=(
                 f"**총 게임:** {total_games}판\n"
+                f"**총 승수:** {total_wins}승\n"
                 f"**승률:** {win_rate}%\n"
                 f"**평균 순위:** {avg_rank}위"
             ),
