@@ -269,16 +269,16 @@ async def player_info(interaction: discord.Interaction, nickname: str):
             tier = "아이언"
 
         tireColor = {
-            "이터니티": discord.Color.dark_red(),
-            "데미갓": discord.Color.red(),
-            "미스릴": discord.Color.dark_orange(),
-            "메테오라이트": discord.Color.orange(),
-            "다이아몬드": discord.Color.blue(),
-            "플래티넘": discord.Color.light_grey(),
-            "골드": discord.Color.gold(),
-            "실버": discord.Color.greyple(),
-            "브론즈": discord.Color.dark_gold(),
-            "아이언": discord.Color.dark_grey()
+            "이터니티": discord.Color.from_rgb(255, 239, 179),   # 환한 골드/화이트
+            "데미갓": discord.Color.from_rgb(220, 20, 60),       # 크림슨 레드
+            "미스릴": discord.Color.from_rgb(64, 224, 208),      # 터쿼이즈
+            "메테오라이트": discord.Color.from_rgb(138, 43, 226), # 바이올렛
+            "다이아몬드": discord.Color.from_rgb(91, 192, 235),  # 라이트 블루
+            "플래티넘": discord.Color.from_rgb(63, 183, 174),    # 틸
+            "골드": discord.Color.from_rgb(255, 215, 0),         # 골드
+            "실버": discord.Color.from_rgb(192, 192, 192),       # 실버
+            "브론즈": discord.Color.from_rgb(169, 113, 66),      # 브론즈 브라운
+            "아이언": discord.Color.from_rgb(107, 107, 107)      # 아이언 그레이
         }
 
         # 임베드 생성
