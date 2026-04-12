@@ -60,6 +60,7 @@ async def event_notification_loop():
     now = datetime.now()
     current_hour = now.hour
     current_minute = now.minute
+    print(f"[알림 루프] 현재 서버 시각: {now.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # 다음 정시까지 5분 남았는지 확인 (XX:55분일 때 발송)
     if current_minute != 55:
@@ -88,12 +89,15 @@ async def event_notification_loop():
     subscribers = c.fetchall()
     conn.close()
 
+    print(f"[알림 루프] {event_type}시간 이벤트 | 구독자 수: {len(subscribers)}")
+
     for (user_id,) in subscribers:
         try:
             user = await bot.fetch_user(user_id)
             await user.send(f"🔔 [{event_type}시간 이벤트] {message}")
+            print(f"[알림 발송 성공] 유저: {user_id}")
         except Exception as e:
-            print(f"알림 발송 실패 (유저: {user_id}): {e}")
+            print(f"[알림 발송 실패] 유저: {user_id} | 에러: {e}")
 
 # -------------------- 봇 이벤트 핸들러 --------------------
 
