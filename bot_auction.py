@@ -3,7 +3,7 @@ from discord.ext import commands, tasks
 from discord import app_commands
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from dotenv import load_dotenv
 import requests
@@ -57,10 +57,11 @@ init_db()
 
 @tasks.loop(minutes=1)
 async def event_notification_loop():
-    now = datetime.now()
+    KST = timezone(timedelta(hours=9))
+    now = datetime.now(KST)
     current_hour = now.hour
     current_minute = now.minute
-    print(f"[알림 루프] 현재 서버 시각: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"[알림 루프] 현재 KST 시각: {now.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # 다음 정시까지 5분 남았는지 확인 (XX:55분일 때 발송)
     if current_minute != 55:
