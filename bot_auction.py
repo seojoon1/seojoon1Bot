@@ -61,8 +61,6 @@ async def event_notification_loop():
     now = datetime.now(KST)
     current_hour = now.hour
     current_minute = now.minute
-    print(f"[알림 루프] 현재 KST 시각: {now.strftime('%Y-%m-%d %H:%M:%S')}")
-
     # 다음 정시까지 5분 남았는지 확인 (XX:55분일 때 발송)
     if current_minute != 55:
         return
@@ -90,15 +88,12 @@ async def event_notification_loop():
     subscribers = c.fetchall()
     conn.close()
 
-    print(f"[알림 루프] {event_type}시간 이벤트 | 구독자 수: {len(subscribers)}")
-
     for (user_id,) in subscribers:
         try:
             user = await bot.fetch_user(user_id)
             await user.send(f"🔔 [{event_type}시간 이벤트] {message}")
-            print(f"[알림 발송 성공] 유저: {user_id}")
         except Exception as e:
-            print(f"[알림 발송 실패] 유저: {user_id} | 에러: {e}")
+            print(f"알림 발송 실패 (유저: {user_id}): {e}")
 
 # -------------------- 봇 이벤트 핸들러 --------------------
 
@@ -110,14 +105,21 @@ async def on_ready():
     if not event_notification_loop.is_running():
         event_notification_loop.start()
 
-    # 슬래시 명령어 동기화 (특정 길드 즉시 반영)
+    # 슬래시 명령어 동기화 - 글로벌 (모든 서버, 반영까지 최대 1시간)
+    try:
+        synced = await bot.tree.sync()
+        print(f"글로벌: {len(synced)}개의 슬래시 명령어를 동기화했습니다.")
+    except Exception as e:
+        print(f"글로벌 명령어 동기화 실패: {e}")
+
+    # 특정 길드 즉시 반영
     guild_ids = [1322870067163299861, 1006188392276561930]
     for gid in guild_ids:
         try:
             guild = discord.Object(id=gid)
             bot.tree.copy_global_to(guild=guild)
             synced = await bot.tree.sync(guild=guild)
-            print(f"길드 {gid}: {len(synced)}개의 슬래시 명령어를 동기화했습니다.")
+            print(f"길드 {gid}: {len(synced)}개의 슬래시 명령어를 즉시 동기화했습니다.")
         except Exception as e:
             print(f"길드 {gid} 명령어 동기화 실패: {e}")
 
