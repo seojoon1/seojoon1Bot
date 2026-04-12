@@ -106,13 +106,15 @@ async def on_ready():
         event_notification_loop.start()
 
     # 슬래시 명령어 동기화 (특정 길드 즉시 반영)
-    try:
-        guild = discord.Object(id=1322870067163299861)
-        bot.tree.copy_global_to(guild=guild)
-        synced = await bot.tree.sync(guild=guild)
-        print(f"{len(synced)}개의 슬래시 명령어를 동기화했습니다.")
-    except Exception as e:
-        print(f"명령어 동기화 실패: {e}")
+    guild_ids = [1322870067163299861, 1006188392276561930]
+    for gid in guild_ids:
+        try:
+            guild = discord.Object(id=gid)
+            bot.tree.copy_global_to(guild=guild)
+            synced = await bot.tree.sync(guild=guild)
+            print(f"길드 {gid}: {len(synced)}개의 슬래시 명령어를 동기화했습니다.")
+        except Exception as e:
+            print(f"길드 {gid} 명령어 동기화 실패: {e}")
 
 # -------------------- /알림설정 명령어 --------------------
 
@@ -171,6 +173,7 @@ async def set_notification(interaction: discord.Interaction, 시작시간: int, 
     conn.close()
 
     type_label = "짝수 + 홀수" if view.selected_type == "둘다" else f"{view.selected_type}시간"
+    print(f"[알림 구독] {interaction.user.name}({interaction.user.id}) | 이벤트: {type_label} | 시간: {시작시간}시~{종료시간}시")
     embed = discord.Embed(title="✅ 알림 구독 완료", color=discord.Color.green())
     embed.add_field(name="이벤트", value=f"{type_label} 이벤트", inline=True)
     embed.add_field(name="활동 시간", value=f"{시작시간}시 ~ {종료시간}시", inline=True)
