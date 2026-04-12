@@ -1,7 +1,9 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import os
+import sqlite3
+from datetime import datetime
 from urllib.parse import quote
 from dotenv import load_dotenv
 import requests
@@ -23,11 +25,85 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# -------------------- DB 초기화 --------------------
+
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notifications.db")
+
+# 이벤트 메시지 (고정)
+EVENT_MESSAGES = {
+    "짝수": "점프점프 / 슈고 상인 보호 / 오드 방울 수집 / 망령 회피 / 이 타일 아닌가요?",
+    "홀수": "골드린의 보물 / 히든 루기 / 높이높이 / 신비로운 트랙 / 팡팡팡",
+}
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            start_hour INTEGER NOT NULL,
+            end_hour INTEGER NOT NULL,
+            UNIQUE(user_id, event_type)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# -------------------- 알림 태스크 --------------------
+
+@tasks.loop(minutes=1)
+async def event_notification_loop():
+    now = datetime.now()
+    current_hour = now.hour
+    current_minute = now.minute
+
+    # 다음 정시까지 5분 남았는지 확인 (XX:55분일 때 발송)
+    if current_minute != 55:
+        return
+
+    next_hour = (current_hour + 1) % 24
+
+    # 다음 정시가 짝수인지 홀수인지
+    if next_hour % 2 == 0:
+        event_type = "짝수"
+    else:
+        event_type = "홀수"
+
+    message = EVENT_MESSAGES.get(event_type)
+    if not message:
+        return
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    # 해당 이벤트를 구독 중이고, 현재 시각이 활동 시간대인 구독자 조회
+    c.execute(
+        "SELECT user_id FROM subscriptions WHERE event_type = ? AND start_hour <= ? AND end_hour >= ?",
+        (event_type, next_hour, next_hour)
+    )
+    subscribers = c.fetchall()
+    conn.close()
+
+    for (user_id,) in subscribers:
+        try:
+            user = await bot.fetch_user(user_id)
+            await user.send(f"🔔 [{event_type}시간 이벤트] {message}")
+        except Exception as e:
+            print(f"알림 발송 실패 (유저: {user_id}): {e}")
+
 # -------------------- 봇 이벤트 핸들러 --------------------
 
 @bot.event
 async def on_ready():
     print(f'{bot.user} (으)로 로그인 성공!')
+
+    # 알림 루프 시작
+    if not event_notification_loop.is_running():
+        event_notification_loop.start()
 
     # 슬래시 명령어 동기화 (특정 길드 즉시 반영)
     try:
@@ -37,6 +113,113 @@ async def on_ready():
         print(f"{len(synced)}개의 슬래시 명령어를 동기화했습니다.")
     except Exception as e:
         print(f"명령어 동기화 실패: {e}")
+
+# -------------------- /알림설정 명령어 --------------------
+
+class EventTypeSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="짝수시간 이벤트", value="짝수", description="0, 2, 4, 6 ... 22시 이벤트"),
+            discord.SelectOption(label="홀수시간 이벤트", value="홀수", description="1, 3, 5, 7 ... 23시 이벤트"),
+            discord.SelectOption(label="둘 다", value="둘다", description="모든 정시 이벤트"),
+        ]
+        super().__init__(placeholder="알림 받을 이벤트를 선택하세요", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.selected_type = self.values[0]
+        self.view.stop()
+        await interaction.response.defer()
+
+class EventTypeView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=30)
+        self.selected_type = None
+        self.add_item(EventTypeSelect())
+
+@bot.tree.command(name="알림설정", description="이벤트 정시 알림을 구독합니다 (5분 전 DM)")
+@app_commands.describe(
+    시작시간="알림 받을 시작 시각 (0~23, 예: 9)",
+    종료시간="알림 받을 종료 시각 (0~23, 예: 23)"
+)
+async def set_notification(interaction: discord.Interaction, 시작시간: int, 종료시간: int):
+    if not (0 <= 시작시간 <= 23) or not (0 <= 종료시간 <= 23):
+        await interaction.response.send_message("❌ 시간은 0~23 사이여야 합니다.", ephemeral=True)
+        return
+
+    if 시작시간 >= 종료시간:
+        await interaction.response.send_message("❌ 시작시간은 종료시간보다 작아야 합니다.", ephemeral=True)
+        return
+
+    view = EventTypeView()
+    await interaction.response.send_message("알림 받을 이벤트 타입을 선택하세요:", view=view, ephemeral=True)
+    await view.wait()
+
+    if view.selected_type is None:
+        await interaction.followup.send("❌ 시간 초과로 취소되었습니다.", ephemeral=True)
+        return
+
+    event_types = ["짝수", "홀수"] if view.selected_type == "둘다" else [view.selected_type]
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    for et in event_types:
+        c.execute(
+            "INSERT OR REPLACE INTO subscriptions (user_id, event_type, start_hour, end_hour) VALUES (?, ?, ?, ?)",
+            (interaction.user.id, et, 시작시간, 종료시간)
+        )
+    conn.commit()
+    conn.close()
+
+    type_label = "짝수 + 홀수" if view.selected_type == "둘다" else f"{view.selected_type}시간"
+    embed = discord.Embed(title="✅ 알림 구독 완료", color=discord.Color.green())
+    embed.add_field(name="이벤트", value=f"{type_label} 이벤트", inline=True)
+    embed.add_field(name="활동 시간", value=f"{시작시간}시 ~ {종료시간}시", inline=True)
+    embed.add_field(name="알림 타이밍", value="매 정시 5분 전 DM", inline=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
+# -------------------- /알림해제 명령어 --------------------
+
+@bot.tree.command(name="알림해제", description="이벤트 알림 구독을 해제합니다")
+async def unsubscribe_notification(interaction: discord.Interaction):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT event_type FROM subscriptions WHERE user_id = ?", (interaction.user.id,))
+    rows = c.fetchall()
+
+    if not rows:
+        conn.close()
+        await interaction.response.send_message("구독 중인 알림이 없습니다.", ephemeral=True)
+        return
+
+    c.execute("DELETE FROM subscriptions WHERE user_id = ?", (interaction.user.id,))
+    conn.commit()
+    conn.close()
+
+    types = ", ".join(r[0] for r in rows)
+    await interaction.response.send_message(f"✅ [{types}] 이벤트 알림이 해제되었습니다.", ephemeral=True)
+
+# -------------------- /알림목록 명령어 --------------------
+
+@bot.tree.command(name="알림목록", description="내 알림 구독 상태를 확인합니다")
+async def list_notifications(interaction: discord.Interaction):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT event_type, start_hour, end_hour FROM subscriptions WHERE user_id = ?", (interaction.user.id,))
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
+        await interaction.response.send_message("구독 중인 알림이 없습니다.", ephemeral=True)
+        return
+
+    embed = discord.Embed(title="🔔 내 알림 구독 목록", color=discord.Color.blue())
+    for event_type, start_hour, end_hour in rows:
+        embed.add_field(
+            name=f"{event_type}시간 이벤트",
+            value=f"활동 시간: {start_hour}시 ~ {end_hour}시\n알림: 정시 5분 전 DM",
+            inline=False
+        )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # -------------------- /bid 명령어 --------------------
 
