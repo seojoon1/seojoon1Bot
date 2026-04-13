@@ -1,24 +1,14 @@
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
-import os
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from dotenv import load_dotenv
 import requests
 from db import init_db, DB_PATH
-# -------------------- 초기 설정 --------------------
+from config import BOT_TOKEN, api_url, er_api_key, ER_API_BASE, SEASON_ID, MATCHING_TEAM_MODE
 
-load_dotenv()
-BOT_TOKEN = os.environ.get("API_KEY")
-api_url = os.environ.get("API_URL")
-er_api_key = os.environ.get("ER_API_KEY")
-
-# 이터널리턴 API 설정
-ER_API_BASE = "https://open-api.bser.io"
-SEASON_ID = 37
-MATCHING_TEAM_MODE = 3
 
 intents = discord.Intents.default()
 intents.message_content = True
