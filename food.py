@@ -21,14 +21,38 @@ class FoodSelect(discord.ui.Select):
         await interaction.response.defer()
 
 
+class ExtraRequestModal(discord.ui.Modal, title="추가 요청사항"):
+    extra = discord.ui.TextInput(
+        label="원하는 점 / 피하고 싶은 점 (선택)",
+        style=discord.TextStyle.paragraph,
+        placeholder="예) 매콤한 거 좋아함, 국물 싫음, 3만원 이하, 해장용...",
+        required=False,
+        max_length=300,
+    )
+
+    def __init__(self, parent_view: "FoodRecommendView"):
+        super().__init__()
+        self.parent_view = parent_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.parent_view.extra_request = self.extra.value.strip()
+        msg = f"✅ 추가 요청 저장됨: {self.parent_view.extra_request}" if self.parent_view.extra_request else "✅ 추가 요청 비움"
+        await interaction.response.send_message(msg, ephemeral=True)
+
+
 class FoodRecommendView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
         self.selections: dict[str, str] = {}
+        self.extra_request: str = ""
         self.add_item(FoodSelect("상황", "상황을 선택하세요", ["아침", "점심", "저녁", "야식", "간식", "회식"]))
         self.add_item(FoodSelect("온도", "온도를 선택하세요", ["뜨거운거", "차가운거", "미지근한거", "상관없음"]))
         self.add_item(FoodSelect("나라", "어느 나라 요리?", ["한식", "중식", "일식", "양식", "아시안", "상관없음"]))
         self.add_item(FoodSelect("종류", "종류를 선택하세요", ["밥", "빵", "면", "스프", "고기", "해산물", "샐러드", "상관없음"]))
+
+    @discord.ui.button(label="추가 요청 입력", style=discord.ButtonStyle.secondary, row=4)
+    async def open_extra(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ExtraRequestModal(self))
 
     @discord.ui.button(label="추천받기", style=discord.ButtonStyle.primary, row=4)
     async def submit(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -49,12 +73,14 @@ class FoodRecommendView(discord.ui.View):
         await interaction.response.defer()
 
         s = self.selections
+        extra_line = f"- 추가 요청: {self.extra_request}\n" if self.extra_request else ""
         prompt = (
             f"당신은 음식 추천 전문가입니다. 아래 조건에 맞는 구체적인 메뉴 하나를 추천해주세요.\n"
             f"- 상황: {s['상황']}\n"
             f"- 온도: {s['온도']}\n"
             f"- 요리 국가: {s['나라']}\n"
-            f"- 종류: {s['종류']}\n\n"
+            f"- 종류: {s['종류']}\n"
+            f"{extra_line}\n"
             f"형식: **메뉴이름**\n- 만 주세요. 설명이나 부가 정보는 필요 없어요. 메뉴 이름만 정확히 답해주세요. 예시) **김치찌개**"
         )
 
@@ -92,6 +118,8 @@ class FoodRecommendView(discord.ui.View):
             value=f"{s['상황']} · {s['온도']} · {s['나라']} · {s['종류']}",
             inline=False,
         )
+        if self.extra_request:
+            embed.add_field(name="추가 요청", value=self.extra_request, inline=False)
         for child in self.children:
             child.disabled = True
         await interaction.edit_original_response(view=self)
