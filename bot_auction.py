@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import requests
 from db import init_db, DB_PATH
 from config import BOT_TOKEN, api_url, er_api_key, ER_API_BASE, SEASON_ID, MATCHING_TEAM_MODE
+from constants import EVENT_MESSAGES
 
 
 intents = discord.Intents.default()
@@ -18,12 +19,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # -------------------- DB 초기화 --------------------
 init_db()
 
-
-# 이벤트 메시지 (고정)
-EVENT_MESSAGES = {
-    "짝수": "점프점프 / 슈고 상인 보호 / 오드 방울 수집 / 망령 회피 / 이 타일 아닌가요?",
-    "홀수": "골드린의 보물 / 히든 루기 / 높이높이 / 신비로운 트랙 / 팡팡팡",
-}
 
 
 init_db()
