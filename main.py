@@ -7,8 +7,9 @@ from urllib.parse import quote
 from dotenv import load_dotenv
 import requests
 from db import init_db, DB_PATH
-from config import BOT_TOKEN, api_url, er_api_key, ER_API_BASE, SEASON_ID, MATCHING_TEAM_MODE
+from config import BOT_TOKEN, er_api_key, ER_API_BASE, SEASON_ID, MATCHING_TEAM_MODE
 from food import register_food_command
+from bid import register_bid_commands
 from constants import EVENT_MESSAGES
 
 
@@ -103,10 +104,8 @@ async def on_ready():
 class EventTypeSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="짝수시간 이벤트", value="짝수", description="0, 2, 4, 6 ... 22시 이벤트"),
-            discord.SelectOption(label="홀수시간 이벤트", value="홀수", description="1, 3, 5, 7 ... 23시 이벤트"),
-            discord.SelectOption(label="둘 다", value="둘다", description="모든 정시 이벤트"),
-            discord.SelectOption(label="나흐마", value="나흐마", description="토/일 21:55 (시간 입력값은 무시)"),
+            discord.SelectOption(label="슈고만", value="슈고만", description="매 정시 5분 전 (짝수/홀수 이벤트)"),
+            discord.SelectOption(label="all", value="all", description="슈고 + 나흐마(토/일 21:55)"),
         ]
         super().__init__(placeholder="알림 받을 이벤트를 선택하세요", options=options)
 
@@ -145,7 +144,12 @@ async def set_notification(interaction: discord.Interaction, 시작시간: int, 
         await interaction.followup.send("❌ 시간 초과로 취소되었습니다.", ephemeral=True)
         return
 
-    event_types = ["짝수", "홀수"] if view.selected_type == "둘다" else [view.selected_type]
+    if view.selected_type == "슈고만":
+        event_types = ["짝수", "홀수"]
+    elif view.selected_type == "all":
+        event_types = ["짝수", "홀수", "나흐마"]
+    else:
+        event_types = [view.selected_type]
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -157,10 +161,15 @@ async def set_notification(interaction: discord.Interaction, 시작시간: int, 
     conn.commit()
     conn.close()
 
-    type_label = "짝수 + 홀수" if view.selected_type == "둘다" else f"{view.selected_type}시간"
+    if view.selected_type == "슈고만":
+        type_label = "슈고 (짝수+홀수)"
+    elif view.selected_type == "all":
+        type_label = "슈고 + 나흐마"
+    else:
+        type_label = view.selected_type
     print(f"[알림 구독] {interaction.user.name}({interaction.user.id}) | 이벤트: {type_label} | 시간: {시작시간}시~{종료시간}시")
     embed = discord.Embed(title="✅ 알림 구독 완료", color=discord.Color.green())
-    embed.add_field(name="이벤트", value=f"{type_label} 이벤트", inline=True)
+    embed.add_field(name="이벤트", value=type_label, inline=True)
     embed.add_field(name="활동 시간", value=f"{시작시간}시 ~ {종료시간}시", inline=True)
     embed.add_field(name="알림 타이밍", value="매 정시 5분 전 DM", inline=True)
     await interaction.followup.send(embed=embed, ephemeral=True)
@@ -209,138 +218,7 @@ async def list_notifications(interaction: discord.Interaction):
         )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# -------------------- /bid 명령어 --------------------
-
-@bot.tree.command(name="bid", description="팀에 돈을 베팅합니다")
-@app_commands.describe(
-    team="팀명",
-    amount="베팅 금액"
-)
-async def bid(interaction: discord.Interaction, team: str, amount: int):
-    """로컬 백엔드 8000포트에 베팅 정보를 POST합니다"""
-    # 팀장 역할 확인
-    if not any(role.name == "팀장" for role in interaction.user.roles):
-        await interaction.response.send_message(
-            "❌ 이 명령어는 '팀장' 역할을 가진 사람만 사용할 수 있습니다.",
-            ephemeral=True
-        )
-        return
-
-    try:
-        # 데이터 준비
-        payload = {
-            "team": team,
-            "amount": amount,
-            "user_id": str(interaction.user.id),
-            "user_name": interaction.user.name
-        }
-
-        # 로컬 백엔드에 POST 요청
-        response = requests.post(f"{api_url if api_url else 'http://localhost:8000'}/api/bid", json=payload, timeout=5)
-
-        if response.status_code == 200:
-            await interaction.response.send_message(
-                f"✅ **{interaction.user.name}** 님이 **{team}** 팀에 **{amount}**만큼 베팅했습니다!",
-                ephemeral=False
-            )
-        else:
-            await interaction.response.send_message(
-                f"❌ 베팅 실패: {response.text}",
-                ephemeral=True
-            )
-    except requests.exceptions.ConnectionError:
-        await interaction.response.send_message(
-            "❌ 백엔드 서버에 연결할 수 없습니다. (localhost:8000)",
-            ephemeral=True
-        )
-    except requests.exceptions.Timeout:
-        await interaction.response.send_message(
-            "❌ 백엔드 서버 응답 시간 초과",
-            ephemeral=True
-        )
-    except Exception as e:
-        await interaction.response.send_message(
-            f"❌ 오류 발생: {str(e)}",
-            ephemeral=True
-        )
-
-# -------------------- /참여 명령어 --------------------
-
-@bot.tree.command(name="참여", description="유저 이름을 등록합니다")
-@app_commands.describe(
-    username="등록할 유저 이름"
-)
-async def participate(interaction: discord.Interaction, username: str):
-    """로컬 백엔드에 참여 정보를 POST합니다"""
-    await interaction.response.defer()
-
-    try:
-        payload = {
-            "discord_username": interaction.user.name,
-            "username": username
-        }
-
-        base_url = api_url if api_url else "http://localhost:8000"
-        response = requests.post(f"{base_url}/api/join", json=payload, timeout=10)
-
-        if response.status_code == 200:
-            data = response.json()
-            embed = discord.Embed(
-                title="✅ 참여 등록 완료",
-                color=discord.Color.green()
-            )
-            embed.add_field(name="닉네임", value=data["username"], inline=True)
-            embed.add_field(name="MMR", value=f"{data['mmr']:,}", inline=True)
-            embed.add_field(name="티어", value=data["tier"], inline=True)
-            await interaction.followup.send(embed=embed)
-        else:
-            await interaction.followup.send(f"❌ 참여 등록 실패: {response.text}")
-    except requests.exceptions.ConnectionError:
-        await interaction.followup.send("❌ 백엔드 서버에 연결할 수 없습니다.")
-    except requests.exceptions.Timeout:
-        await interaction.followup.send("❌ 백엔드 서버 응답 시간 초과")
-    except Exception as e:
-        await interaction.followup.send(f"❌ 오류 발생: {str(e)}")
-
-# -------------------- /참여자목록 명령어 --------------------
-
-@bot.tree.command(name="참여자목록", description="참여 등록된 플레이어 목록을 확인합니다")
-async def player_list(interaction: discord.Interaction):
-    """백엔드에서 참여자 목록을 조회합니다"""
-    await interaction.response.defer()
-
-    try:
-        base_url = api_url if api_url else "http://localhost:8000"
-        response = requests.get(f"{base_url}/api/players", timeout=10)
-
-        if response.status_code == 200:
-            data = response.json()
-            players = data["players"]
-
-            if not players:
-                await interaction.followup.send("참여자가 없습니다.")
-                return
-
-            embed = discord.Embed(
-                title="📋 참여자 목록",
-                description=f"총 {len(players)}명",
-                color=discord.Color.blue()
-            )
-            for p in players:
-                embed.add_field(
-                    name=p["username"],
-                    value=f"디스코드: {p['discord_username']}\nMMR: {p['mmr']:,} | 티어: {p['tier']}",
-                    inline=False
-                )
-            await interaction.followup.send(embed=embed)
-        else:
-            await interaction.followup.send(f"❌ 조회 실패: {response.text}")
-    except requests.exceptions.ConnectionError:
-        await interaction.followup.send("❌ 백엔드 서버에 연결할 수 없습니다.")
-    except requests.exceptions.Timeout:
-        await interaction.followup.send("❌ 백엔드 서버 응답 시간 초과")
-    except Exception as e:
-        await interaction.followup.send(f"❌ 오류 발생: {str(e)}")
+register_bid_commands(bot)
 
 # -------------------- /정보 명령어 --------------------
 
