@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from dotenv import load_dotenv
 import requests
-
+from db import init_db, DB_PATH
 # -------------------- 초기 설정 --------------------
 
 load_dotenv()
@@ -26,8 +26,8 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # -------------------- DB 초기화 --------------------
+init_db()
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notifications.db")
 
 # 이벤트 메시지 (고정)
 EVENT_MESSAGES = {
@@ -35,21 +35,6 @@ EVENT_MESSAGES = {
     "홀수": "골드린의 보물 / 히든 루기 / 높이높이 / 신비로운 트랙 / 팡팡팡",
 }
 
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS subscriptions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            event_type TEXT NOT NULL,
-            start_hour INTEGER NOT NULL,
-            end_hour INTEGER NOT NULL,
-            UNIQUE(user_id, event_type)
-        )
-    """)
-    conn.commit()
-    conn.close()
 
 init_db()
 
