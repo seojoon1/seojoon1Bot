@@ -61,7 +61,13 @@ class FoodRecommendView(discord.ui.View):
         try:
             res = requests.post(
                 f"{GEMINI_API_URL}?key={gemini_api_key}",
-                json={"contents": [{"parts": [{"text": prompt}]}]},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "maxOutputTokens": 50,
+                        "temperature": 0.9,
+                    },
+                },
                 timeout=15,
             )
             if res.status_code == 429:
