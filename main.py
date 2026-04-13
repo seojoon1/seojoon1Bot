@@ -32,39 +32,43 @@ async def event_notification_loop():
     now = datetime.now(KST)
     current_hour = now.hour
     current_minute = now.minute
+    weekday = now.weekday()  # 월=0 ~ 일=6
+
     # 다음 정시까지 5분 남았는지 확인 (XX:55분일 때 발송)
     if current_minute != 55:
-        return
-
-    next_hour = (current_hour + 1) % 24
-
-    # 다음 정시가 짝수인지 홀수인지
-    if next_hour % 2 == 0:
-        event_type = "짝수"
-    else:
-        event_type = "홀수"
-
-    message = EVENT_MESSAGES.get(event_type)
-    if not message:
         return
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # 해당 이벤트를 구독 중이고, 현재 시각이 활동 시간대인 구독자 조회
-    c.execute(
-        "SELECT user_id FROM subscriptions WHERE event_type = ? AND start_hour <= ? AND end_hour >= ?",
-        (event_type, next_hour, next_hour)
-    )
-    subscribers = c.fetchall()
-    conn.close()
+    next_hour = (current_hour + 1) % 24
+    event_type = "짝수" if next_hour % 2 == 0 else "홀수"
+    message = EVENT_MESSAGES.get(event_type)
+    if message:
+        c.execute(
+            "SELECT user_id FROM subscriptions WHERE event_type = ? AND start_hour <= ? AND end_hour >= ?",
+            (event_type, next_hour, next_hour)
+        )
+        for (user_id,) in c.fetchall():
+            try:
+                user = await bot.fetch_user(user_id)
+                await user.send(f"🔔 [{event_type}시간 이벤트] {message}")
+            except Exception as e:
+                print(f"알림 발송 실패 (유저: {user_id}): {e}")
 
-    for (user_id,) in subscribers:
-        try:
-            user = await bot.fetch_user(user_id)
-            await user.send(f"🔔 [{event_type}시간 이벤트] {message}")
-        except Exception as e:
-            print(f"알림 발송 실패 (유저: {user_id}): {e}")
+    # 나흐마: 토(5)/일(6) 21:55 KST
+    if weekday in (5, 6) and current_hour == 21:
+        nahma_msg = EVENT_MESSAGES.get("나흐마")
+        if nahma_msg:
+            c.execute("SELECT user_id FROM subscriptions WHERE event_type = ?", ("나흐마",))
+            for (user_id,) in c.fetchall():
+                try:
+                    user = await bot.fetch_user(user_id)
+                    await user.send(f"🔔 [나흐마] {nahma_msg}")
+                except Exception as e:
+                    print(f"나흐마 알림 발송 실패 (유저: {user_id}): {e}")
+
+    conn.close()
 
 # -------------------- 봇 이벤트 핸들러 --------------------
 
@@ -102,6 +106,7 @@ class EventTypeSelect(discord.ui.Select):
             discord.SelectOption(label="짝수시간 이벤트", value="짝수", description="0, 2, 4, 6 ... 22시 이벤트"),
             discord.SelectOption(label="홀수시간 이벤트", value="홀수", description="1, 3, 5, 7 ... 23시 이벤트"),
             discord.SelectOption(label="둘 다", value="둘다", description="모든 정시 이벤트"),
+            discord.SelectOption(label="나흐마", value="나흐마", description="토/일 21:55 (시간 입력값은 무시)"),
         ]
         super().__init__(placeholder="알림 받을 이벤트를 선택하세요", options=options)
 
