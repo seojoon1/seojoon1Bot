@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import requests
 from db import init_db, DB_PATH
 from config import BOT_TOKEN, api_url, er_api_key, ER_API_BASE, SEASON_ID, MATCHING_TEAM_MODE
+from food import register_food_command
 from constants import EVENT_MESSAGES
 
 
@@ -114,6 +115,8 @@ class EventTypeView(discord.ui.View):
         super().__init__(timeout=30)
         self.selected_type = None
         self.add_item(EventTypeSelect())
+
+register_food_command(bot)
 
 @bot.tree.command(name="알림설정", description="이벤트 정시 알림을 구독합니다 (5분 전 DM)")
 @app_commands.describe(
