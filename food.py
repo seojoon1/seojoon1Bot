@@ -65,10 +65,11 @@ class FoodRecommendView(discord.ui.View):
                 timeout=15,
             )
             if res.status_code != 200:
-                await interaction.followup.send(f"❌ Gemini API 오류: {res.status_code} {res.text}")
+                body = res.text[:1500]
+                await interaction.followup.send(f"❌ Gemini API 오류: {res.status_code}\n```{body}```")
                 return
             data = res.json()
-            text = data["candidates"][0]["content"]["parts"][0]["text"]
+            text = data["candidates"][0]["content"]["parts"][0]["text"][:4000]
         except requests.exceptions.Timeout:
             await interaction.followup.send("❌ Gemini API 응답 시간 초과")
             return
