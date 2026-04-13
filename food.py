@@ -64,6 +64,9 @@ class FoodRecommendView(discord.ui.View):
                 json={"contents": [{"parts": [{"text": prompt}]}]},
                 timeout=15,
             )
+            if res.status_code == 429:
+                await interaction.followup.send("❌ 요청이 너무 많아요. 1분 정도 후에 다시 시도해주세요. (Gemini 무료 한도 초과)")
+                return
             if res.status_code != 200:
                 body = res.text[:1500]
                 await interaction.followup.send(f"❌ Gemini API 오류: {res.status_code}\n```{body}```")
