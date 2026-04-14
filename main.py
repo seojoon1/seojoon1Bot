@@ -10,7 +10,7 @@ from db import init_db, DB_PATH
 from config import BOT_TOKEN, er_api_key, ER_API_BASE, SEASON_ID, MATCHING_TEAM_MODE
 from food import register_food_command
 from bid import register_bid_commands
-from constants import EVENT_MESSAGES
+from constants import EVENT_MESSAGES, CHARACTER_NAMES
 
 
 intents = discord.Intents.default()
@@ -46,9 +46,15 @@ async def event_notification_loop():
     event_type = "짝수" if next_hour % 2 == 0 else "홀수"
     message = EVENT_MESSAGES.get(event_type)
     if message:
+        # 시작<=종료: 일반 범위 / 시작>종료: 자정 넘김(예: 20~6시)
         c.execute(
-            "SELECT user_id FROM subscriptions WHERE event_type = ? AND start_hour <= ? AND end_hour >= ?",
-            (event_type, next_hour, next_hour)
+            """SELECT user_id FROM subscriptions
+               WHERE event_type = ?
+                 AND (
+                   (start_hour <= end_hour AND start_hour <= ? AND end_hour >= ?)
+                   OR (start_hour > end_hour AND (? >= start_hour OR ? <= end_hour))
+                 )""",
+            (event_type, next_hour, next_hour, next_hour, next_hour)
         )
         for (user_id,) in c.fetchall():
             try:
@@ -132,8 +138,8 @@ async def set_notification(interaction: discord.Interaction, 시작시간: int, 
         await interaction.response.send_message("❌ 시간은 0~23 사이여야 합니다.", ephemeral=True)
         return
 
-    if 시작시간 >= 종료시간:
-        await interaction.response.send_message("❌ 시작시간은 종료시간보다 작아야 합니다.", ephemeral=True)
+    if 시작시간 == 종료시간:
+        await interaction.response.send_message("❌ 시작시간과 종료시간이 같을 수 없습니다.", ephemeral=True)
         return
 
     view = EventTypeView()
@@ -221,28 +227,7 @@ async def list_notifications(interaction: discord.Interaction):
 register_bid_commands(bot)
 
 # -------------------- /정보 명령어 --------------------
-
-# 캐릭터 코드 → 이름 매핑
-CHARACTER_NAMES = {
-    1: "재키", 2: "아야", 3: "피오라", 4: "매그너스", 5: "자히르",
-    6: "나딘", 7: "현우", 8: "하트", 9: "아이솔", 10: "리 다이린",
-    11: "유키", 12: "혜진", 13: "쇼우", 14: "키아라", 15: "시셀라",
-    16: "실비아", 17: "아드리아나", 18: "쇼이치", 19: "엠마", 20: "레녹스",
-    21: "로지", 22: "루크", 23: "캐시", 24: "아델라", 25: "버니스",
-    26: "바바라", 27: "알렉스", 28: "수아", 29: "레온", 30: "일레븐",
-    31: "리오", 32: "윌리엄", 33: "니키", 34: "나타폰", 35: "얀",
-    36: "이바", 37: "다니엘", 38: "제니", 39: "카밀로", 40: "클로에",
-    41: "요한", 42: "비앙카", 43: "셀린", 44: "에키온", 45: "마이",
-    46: "에이든", 47: "라우라", 48: "띠아", 49: "펠릭스", 50: "엘레나",
-    51: "프리야", 52: "아디나", 53: "마커스", 54: "칼라", 55: "에스텔",
-    56: "피올로", 57: "마르티나", 58: "헤이즈", 59: "아이작", 60: "타지아",
-    61: "이렘", 62: "테오도르", 63: "이안", 64: "바냐", 65: "데비&마를렌",
-    66: "아르다", 67: "아비게일", 68: "알론소", 69: "레니", 70: "츠바메",
-    71: "케네스", 72: "카티야", 73: "샬럿", 74: "다르코", 75: "르노어",
-    76: "가넷", 77: "유민", 78: "히스이", 79: "유스티나", 80: "이슈트반",
-    81: "니아", 82: "슈린", 83: "헨리", 84: "블레어", 85: "미르카",
-    86: "펜리르", 87: "코렐라인"
-}
+    
 
 @bot.tree.command(name="정보", description="플레이어의 상세 정보를 조회합니다")
 @app_commands.describe(
