@@ -10,6 +10,7 @@ from db import init_db, DB_PATH
 from config import BOT_TOKEN, er_api_key, ER_API_BASE, SEASON_ID, MATCHING_TEAM_MODE
 from food import register_food_command
 from bid import register_bid_commands
+from chat_relay import register_chat_relay
 from constants import EVENT_MESSAGES, CHARACTER_NAMES
 
 
@@ -225,6 +226,7 @@ async def list_notifications(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 register_bid_commands(bot)
+register_chat_relay(bot)
 
 # -------------------- /정보 명령어 --------------------
     
