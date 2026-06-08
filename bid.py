@@ -204,3 +204,28 @@ def register_bid_commands(bot: commands.Bot):
             await interaction.followup.send("❌ 백엔드 서버 응답 시간 초과")
         except Exception as e:
             await interaction.followup.send(f"❌ 오류 발생: {str(e)}")
+
+    @bot.tree.command(name="목데이터", description="테스트용 목 데이터를 생성합니다 (관리자 전용)")
+    async def mock(interaction: discord.Interaction):
+        # 관리자(서버 관리 권한) 전용
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ 이 명령어는 관리자만 사용할 수 있습니다.", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer()
+
+        try:
+            response = requests.post(f"{_base_url()}/api/mock", timeout=10)
+
+            if response.status_code == 200:
+                await interaction.followup.send("✅ 목 데이터가 생성되었습니다.")
+            else:
+                await interaction.followup.send(f"❌ 목 데이터 생성 실패: {response.text}")
+        except requests.exceptions.ConnectionError:
+            await interaction.followup.send("❌ 백엔드 서버에 연결할 수 없습니다.")
+        except requests.exceptions.Timeout:
+            await interaction.followup.send("❌ 백엔드 서버 응답 시간 초과")
+        except Exception as e:
+            await interaction.followup.send(f"❌ 오류 발생: {str(e)}")
